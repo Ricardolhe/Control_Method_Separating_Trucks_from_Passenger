@@ -1,3 +1,5 @@
+# 根据csv文件生成每一天的数据
+
 from ETCdata import ETCDataUlit
 import numpy as np
 import pandas as pd
@@ -14,7 +16,7 @@ for i in range(0, nums):
     print(str_date)
     path_csv = "data/数据/ETC/allcar/" + str_date + ".csv"  # json文件保存路径
 
-    etc_data.get_car_speed(path_csv, str_date)
+    etc_data.get_car_speed(path_csv, str_date) # 在这里面更改上下游编号
 
     path_each_car = "data/数据/ETC/eachcar/" + str_date + ".csv"
     etc_data.save_car_speed(path_each_car)

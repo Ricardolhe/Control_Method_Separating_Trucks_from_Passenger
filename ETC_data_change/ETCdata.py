@@ -28,7 +28,7 @@ class ETCDataUlit(object):
 
     def get_car_speed(self,path_etc_json,str_day):
         """
-        根据etc的json数据获取每一辆经过检测路段的车辆的空间速度
+        根据etc的csv数据获取每一辆经过检测路段的车辆的空间速度
         :param path_etc_json: json文件路劲
              str_day: 数据日期
         :return: 修改实例的日期与车辆速度数据
@@ -38,7 +38,7 @@ class ETCDataUlit(object):
 
         data_up = data_all.loc[data_all["gantryId"] ==self.up0 ].reset_index()
         data_down = data_all.loc[data_all["gantryId"] == self.down0].reset_index()
-        data_up["transTime"] = pd.to_datetime(data_up["transTime"])
+        data_up["transTime"] = pd.to_datetime(data_up["transTime"])  # 更改格式为时间
         data_down["transTime"] = pd.to_datetime(data_down["transTime"])
 
         del data_all

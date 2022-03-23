@@ -1,39 +1,78 @@
 #!/usr/bin/python3
 # -*- coding:utf-8 -*-
-# project: 毕业设计
+# project: 毕业设计—SUMO的traci接口连接
 # user: Ricardo
 # Author: Ricardo
-# createtime: 2021/12/21
+# createtime: 2022/2/14
 
 
-import numpy as np
-import pandas as pd
+import traci
+import os, sys
+
+if 'SUMO_HOME' in os.environ:
+    tools = os.path.join(os.environ['SUMO_HOME'], 'tools')
+    sys.path.append(tools)
+else:
+    sys.exit("please declare environment variable 'SUMO_HOME'")
 
 
-class DataUlit(object):
+class Controls(object):
     """
-    微波检测器数据处理的类
+    不同控制方法的类
     """
+    def __init__(self,):
+        self.sumoCmd = ["sumo-gui", "-c", "data/map/maptest6/road.sumocfg"]
+        self.T = 3600
+        self.delt_t = 600  # 控制周期
 
-    def __init__(self, path, deviceID, direction):
-        # 默认[0]，即首行作为列名，设置为[0,1]，即表示将前两行作为多重索引
-        data = pd.read_excel(path, header=[0])
-        self.data = data.loc[(data['deviceID'] == deviceID) & (data['direction'] == direction)]  # 指定检测器编号与车流方向
-
-    def get_period_data(self):
+    def no_controls(self):
         """
-        按照时间间隔求解该时间间隔平均空间平均速度
+        客货不分道控制方法
         """
-        df_time = self.data["statTime"].drop_duplicates()  # 去重
-        arr_speed = np.zeros(df_time.size)
-        for t in df_time:
-            df_t_data = self.data.loc[self.data["statTime"] == t, "vehicleFlux":]
+        traci.start(self.sumoCmd)
+        step = 0
+        while step < self.T:
+            traci.simulationStep()
+            step += 1
+        traci.close()
 
+    def static_controls(self):
+        """
+        静态客货分道
+        """
+        traci.start(self.sumoCmd)
+        step = 0
+        traci.lane.setAllowed("E1_0", ["truck"])
+        traci.lane.setAllowed("E1_1", ["passenger"])
+        traci.lane.setAllowed("E1_2", ["passenger"])
+        while step < self.T:
+            traci.simulationStep()
+            step += 1
+            # if step == 200:
+            #     traci.lane.setAllowed("E1_1", ["truck"])
+        traci.close()
+
+    def feedback_controls(self):
+        """
+        反馈式动态客货分道
+        """
+        traci.start(self.sumoCmd)
+        step = 0
+        edge_name = "E1"
+        vehicles_begin = traci.edge.getLastStepVehicleIDs(edge_name)  # 初始车辆列表
+        # traci.lane.setAllowed("E1_0", ["truck"])
+        # traci.lane.setAllowed("E1_1", ["passenger"])
+        # traci.lane.setAllowed("E1_2", ["passenger"])
+
+        while step < self.T:
+            traci.simulationStep()
+            step += 1
+
+            # if step == 200:
+            #     traci.lane.setAllowed("E1_1", ["truck"])
+        traci.close()
 
 
 if __name__ == "__main__":
-    path = "data/副本沪苏浙高速交调数据20210119-20210219(1).xlsx"
-    deviceID = 71270320100006
-    direction = 1
-    weibo = DataUlit(path, deviceID, direction)
-    weibo.get_period_data()
+    control = Controls()
+    control.static_controls()
