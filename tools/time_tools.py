@@ -34,3 +34,5 @@ class TimeTool(object):
         """
         dt = time_str[:4] + "-" + time_str[4:6] + "-" + time_str[6:]
         return dt
+
+

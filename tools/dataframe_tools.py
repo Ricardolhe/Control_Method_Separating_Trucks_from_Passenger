@@ -33,3 +33,12 @@ class DaTaFrameTool(object):
         :return:生成csv文件
         """
         df_data.to_csv(path_save, encoding="utf-8", index=False)
+
+    @staticmethod
+    def df_load_excel(path_load):
+        """
+        读取excel文件
+        :param path_load:存储数据的文件夹路径
+        :return:生成数据表
+        """
+        return pd.read_excel(path_load, header=[0])

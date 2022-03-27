@@ -18,14 +18,14 @@ class DataUlit(object):
     微波检测器数据处理的类
     """
 
-    def __init__(self, path1, type="csv"):
-        # 默认[0]，即首行作为列名，设置为[0,1]，即表示将前两行作为多重索引
-        if type == "xlxs":
-            self.data = pd.read_excel(path1, header=[0])
-        elif type == "csv":
-            self.data = pd.read_csv(path1)
-        # self.deviceID = 71270320100006
-        # self.direction = 0
+    def __init__(self, data=None):
+        self.data = data
+
+    def df_read_excel(self, path1):
+        self.data = pd.read_excel(path1, header=[0])
+
+    def df_read_csv(self, path1):
+        self.data = pd.read_csv(path1)
 
     def select_data(self, deviceID1=-1, direction1=-1, date1=""):
         """
@@ -42,14 +42,15 @@ class DataUlit(object):
             data = data.loc[data['direction'] == direction1].reset_index(drop=True)
         if date1 != "":
             data = data.loc[data['statTime'].str.contains(date1)].reset_index(drop=True)
-        return data
+        return DataUlit(data)
 
-    @staticmethod
-    def get_period_data(data):
+    def get_period_data(self):
         """
         按照时间间隔求解该时间间隔平均空间平均速度
         """
+        data = self.data
         # 指定检测器编号与车流方向
+        data["statTime"] = pd.to_datetime(data["statTime"])  # 更改时间格式
         df_time = data["statTime"].drop_duplicates()  # 去重
         df_nums_speed = pd.DataFrame(index=df_time, columns=["nums", "s_speed"], data=np.zeros((df_time.size, 2)))
         # 存储每5min车辆数与近似空间平均速度
@@ -72,7 +73,7 @@ class DataUlit(object):
         return df_nums_speed
 
     @staticmethod
-    def get_eachtype_data(data,type_name):
+    def get_eachtype_data(data, type_name):
         """
         获取指定类型车辆的车辆数、平均速度
         :param data: 原始数据
@@ -97,62 +98,157 @@ class DataUlit(object):
 
         return v_sum, v_speed
 
-    @staticmethod
-    def get_alltype_perioddata(data, time_from, time_end, period=5):
+    def get_alltype_perioddata(self, time_from, time_end, period=5):
         """
         按照时间间隔获取4种车型的数量
         :param time_end: 结束时间，标准时间格式 "2016-05-05 20:28:54"
         :param time_from: 开始时间，标准时间格式 "2016-05-05 20:28:00"
-        :param period:统计间隔，必须是5的倍数start_time
-        :param data:原始数据
+        :param period:统计间隔，必须是5的倍数
         :return:
         """
-
+        data = self.data
         data["statTime"] = pd.to_datetime(data["statTime"])  # 更改时间格式
         time_from = datetime.datetime.strptime(time_from, "%Y-%m-%d %H:%M:%S")
         time_to = time_from + datetime.timedelta(minutes=period)
         time_end = datetime.datetime.strptime(time_end, "%Y-%m-%d %H:%M:%S")
 
         type_list = ["vehicle", "smallVehicle", "mediumVehicle", "largeVehicle", "sLargeVehicle"]
-        num_list = ["all_v_num","s_v_num","m_v_num", "l_v_num", "sl_v_num"]
-        speed_list = ["all_v_mean_speed","s_v_mean_speed","m_v_mean_speed","l_v_mean_speed","sl_v_mean_speed"]
+        num_list = ["all_v_num", "s_v_num", "m_v_num", "l_v_num", "sl_v_num"]
+        speed_list = ["all_v_mean_speed", "s_v_mean_speed", "m_v_mean_speed", "l_v_mean_speed", "sl_v_mean_speed"]
         len_type = len(type_list)
         data_period = pd.DataFrame(columns=["start_time", "end_time"] + num_list + speed_list)
         number = 0  # 下标
         while time_from < time_end:
-            data_period.loc[number,"start_time"] = time_from
+            data_period.loc[number, "start_time"] = time_from
             data_period.loc[number, "end_time"] = time_to
             search_result = data.loc[(data["statTime"] >= time_from) & (data["statTime"] < time_to)]
             if len(search_result) == 0:
-                data_period.iloc[number,2:]=0  # 全赋值为0
+                data_period.iloc[number, 2:] = 0  # 全赋值为0
             else:
                 for i in range(len_type):
-                    data_period.loc[number, num_list[i]],data_period.loc[number, speed_list[i]] \
-                        = DataUlit.get_eachtype_data(search_result,type_list[i])
+                    data_period.loc[number, num_list[i]], data_period.loc[number, speed_list[i]] \
+                        = self.get_eachtype_data(search_result, type_list[i])
             number += 1
             time_from = time_to
             time_to = time_from + datetime.timedelta(minutes=period)
-            if(time_end < time_to):
+            if time_end < time_to:
                 time_to = time_end
         return data_period
 
 
+class PeriodDataUlit(object):
+    """
+    微波检测器周期汇总数据处理的类
+    """
+
+    def __init__(self, data=None):
+        self.data = data
+        self.pcu =[1, 1.5, 2.0, 3.0]
+
+    def df_read_excel(self, path1):
+        data = pd.read_excel(path1, header=[0])
+        data["start_time"] = pd.to_datetime(data["start_time"])
+        data["end_time"] = pd.to_datetime(data["end_time"])
+        self.data = data
+
+    def df_read_csv(self, path1):
+        data = pd.read_csv(path1)
+        data["start_time"] = pd.to_datetime(data["start_time"])
+        data["end_time"] = pd.to_datetime(data["end_time"])
+        self.data = data
+
+    def change_to_sumo_flow(self):
+        data = self.data
+
+    def extend_all_flow(self, k, inplace=True):
+        """
+        对数据进行扩样
+        :param k: 整体扩样系数
+        :param inplace: 是否生成新类
+        :return: 如果生成新类，就返回
+        """
+        data = self.data.copy(deep=True)
+        data.loc[:, "all_v_num":"sl_v_num"] = data.loc[:, "all_v_num":"sl_v_num"] * k
+        if inplace:
+            return PeriodDataUlit(data)
+        else:
+            self.data = data
+
+    def extend_PandT_flow(self, df_PandT, inplace=True):
+        """
+        根据客、货扩样系数对车辆进行扩样
+        :param inplace: 是否生成新类
+        :param df_PandT: 起始时间，终止时间，客车扩样系数，货车扩样系数的数据
+        :return: 如果生成新类，就返回
+        """
+        data = self.data.copy(deep=True)
+        df_PandT["start_time"] = pd.to_datetime(df_PandT["start_time"])
+        df_PandT["end_time"] = pd.to_datetime(df_PandT["end_time"])
+        for i in range(len(df_PandT)):
+            s_time = df_PandT["start_time"][i]
+            e_time = df_PandT["end_time"][i]
+            p = df_PandT["P"][i]
+            t = df_PandT["T"][i]
+            data.loc[(data["start_time"] >= s_time) & (data["start_time"] < e_time), "s_v_num"] =\
+                data.loc[(data["start_time"] >= s_time) & (data["start_time"] < e_time), "s_v_num"] * p
+            data.loc[(data["start_time"] >= s_time) & (data["start_time"] < e_time), "m_v_num":"sl_v_num"] =\
+                data.loc[(data["start_time"] >= s_time) & (data["start_time"] < e_time), "m_v_num":"sl_v_num"] * t
+        data["all_v_num"] = data["s_v_num"] + data["m_v_num"] + data["l_v_num"] + data["sl_v_num"]
+        if inplace:
+            return PeriodDataUlit(data)
+        else:
+            self.data = data
+
+    def get_P_to_T(self, df_PandT):
+        """
+        分别计算客车、货车的扩样系数
+        :param df_PandT: 起始时间，终止时间，客货比（标准车）的数组
+        :return: 起始时间，终止时间，客货比（标准车）的数组, 客车数，货车数，客车数（扩样后）,货车车数（扩样后），客车扩样系数，货车扩样系数的数据
+        """
+        df_PandT["start_time"] = pd.to_datetime(df_PandT["start_time"])
+        df_PandT["end_time"] = pd.to_datetime(df_PandT["end_time"])
+        data = self.data
+        pcu = self.pcu
+        for i in range(len(df_PandT)):
+            s_time = df_PandT["start_time"][i]
+            e_time = df_PandT["end_time"][i]
+            df_num = data.loc[(data["start_time"] >= s_time) & (data["start_time"] < e_time),"all_v_num":"sl_v_num"].sum()
+            num_p = df_num["s_v_num"]
+            num_t = df_num["m_v_num"] * pcu[1] + df_num["l_v_num"] * pcu[2] + df_num["sl_v_num"] * pcu[3]
+            num_all = num_p + num_t
+            PtoT = df_PandT["PtoT"][i]
+            df_PandT.loc[i, "num_p"] = num_p
+            df_PandT.loc[i, "num_t"] = num_t
+            df_PandT.loc[i, "num_p_end"] = num_all * PtoT / (1 + PtoT)
+            df_PandT.loc[i, "num_t_end"] = num_all / (1 + PtoT)
+            df_PandT.loc[i, "P"] = num_all * PtoT / (1 + PtoT) / num_p
+            df_PandT.loc[i, "T"] = num_all / (1 + PtoT) / num_t
+        return df_PandT
 
 
 if __name__ == "__main__":
     path = "../data/副本沪苏浙高速交调数据20210119-20210219(1).csv"
-    # path_result = "../data/weibo_result.xlsx"
-    path_result = "../data/weibo_period5.xlsx"
+    path_result = "../data/weibo_period5_change.xlsx"
     deviceID = 71270320100006
     direction = 0
-    date = "2021-01-20"
-    start_time = "2021-01-20 00:00:00"
-    end_time = "2021-01-21 00:00:00"
+    date = "2021-01-26"
+    start_time = "2021-01-26 12:00:00"
+    end_time = "2021-01-26 14:00:00"
 
-    weibo = DataUlit(path, "csv")
-    etc_data = weibo.select_data(deviceID, direction, date)  # 筛选合适的数据
-    period5_data = weibo.get_alltype_perioddata(etc_data, start_time, end_time, 5)
-    DaTaFrameTool.df_save_excel(period5_data,path_result)
+    weibo = DataUlit()
+    weibo.df_read_csv(path)
+    etc_data = weibo.select_data(deviceID, direction)  # 筛选合适的数据
+    etc_data_20 = etc_data.get_alltype_perioddata(start_time, end_time, 20)  # 20min聚合
+    etc_data_5 = etc_data.get_alltype_perioddata(start_time, end_time, 5)  # 5min聚合
+    df_PtoT = pd.DataFrame(columns=["start_time", "end_time", "PtoT"])  # 各个时段客货比关系
+    df_PtoT["PtoT"] = [1, 4, 3 / 2, 2 / 3, 1 / 4, 1]  # 各个时段客货比关系
+    df_PtoT.loc[:,["start_time", "end_time"]] = etc_data_20.loc[:,["start_time", "end_time"]]
+    etc_data_5 = PeriodDataUlit(etc_data_5)
+    etc_data_5.extend_all_flow(1.6, False)
+    df_PtoT = etc_data_5.get_P_to_T(df_PtoT)
+    etc_data_5.extend_PandT_flow(df_PtoT,False)
+    DaTaFrameTool.df_save_excel(etc_data_5.data,path_result)
+    # DaTaFrameTool.df_save_excel(df_PtoT, "test.xlsx")
 
 
-    # weibo.get_period_data(deviceID, direction) # 获取
+    print(1)
