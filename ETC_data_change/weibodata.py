@@ -5,12 +5,11 @@
 # Author: Ricardo
 # create-time: 2021/12/21
 
+import tools.sumo_txt_tools as sttool
 import numpy as np
 import pandas as pd
 import datetime
 import time
-from tools.time_tools import TimeTool
-from tools.dataframe_tools import DaTaFrameTool
 
 
 class DataUlit(object):
@@ -157,9 +156,6 @@ class PeriodDataUlit(object):
         data["end_time"] = pd.to_datetime(data["end_time"])
         self.data = data
 
-    def change_to_sumo_flow(self):
-        data = self.data
-
     def extend_all_flow(self, k, inplace=True):
         """
         对数据进行扩样
@@ -225,10 +221,95 @@ class PeriodDataUlit(object):
             df_PandT.loc[i, "T"] = num_all / (1 + PtoT) / num_t
         return df_PandT
 
+    def get_percent_eachtime(self):
+        """
+        计算每一时段各种车型占比
+        :return: 各种车型占比结果
+        """
+        data = self.data.copy(deep=True)
+        data.loc[:,"s_v_num":"sl_v_num"] = data.loc[:,"s_v_num":"sl_v_num"].div(data["all_v_num"],axis=0)
+        data = data.loc[:,:"sl_v_num"]
+        return data
+
+    @staticmethod
+    def change_to_sumo_flow(data, path_sumo, time_from, line=3):
+        """
+        用于生成sumo仿真软件的车流
+        :param start_time: 开始时间，标准时间格式 "2016-05-05 20:28:00"
+        :param line: 车道数
+        :param path_sumo: 车流文件
+        :param data: 不同时段各种车型占比结果
+        :return: 生成sumo车流文件
+        """
+        from_seg = "predict_0"
+        to_seg = "contral_4"
+        time_from = datetime.datetime.strptime(time_from, "%Y-%m-%d %H:%M:%S")
+        space = "    "
+
+        with open(path_sumo, 'w') as file_object:
+            file_object.write("<routes>\n")
+
+            for i in range(len(data)):
+                typedist = "typedist" + str(i)
+                flow = "flow" + str(i)
+                begin = data["start_time"][i]
+                end = data["end_time"][i]
+                file_object.write(space + '<vTypeDistribution id="' + typedist +'">\n')
+                dic_s = {
+                    "id": "s-car"+str(i),
+                    "color": "yellow",
+                    "vClass": "passenger",
+                    "probability":str(data["s_v_num"][i])
+                }
+                file_object.write(2*space + sttool.get_vType_str(dic_s))
+
+                dic_m = {
+                    "id": "m-car"+str(i),
+                    "color": "red",
+                    "vClass": "coach",
+                    "probability":str(data["m_v_num"][i])
+                }
+                file_object.write(2*space + sttool.get_vType_str(dic_m))
+
+                dic_l = {
+                    "id": "l-car"+str(i),
+                    "color": "magenta",
+                    "vClass": "truck",
+                    "length": "12.0",
+                    "width" : "2.5",
+                    "height": "4.0",
+                    "probability":str(data["l_v_num"][i])
+                }
+                file_object.write(2*space + sttool.get_vType_str(dic_l))
+
+                dic_sl = {
+                    "id": "sl-car"+str(i),
+                    "color": "white",
+                    "vClass": "trailer",
+                    "probability":str(data["sl_v_num"][i])
+                }
+                file_object.write(2*space + sttool.get_vType_str(dic_sl))
+                file_object.write(space + '</vTypeDistribution>\n')
+
+                dic_flow ={
+                    "id": "flow" + str(i),
+                    "type": typedist,
+                    "from": from_seg,
+                    "to": to_seg,
+                    "departLane": "random",
+                    "departSpeed": "max",
+                    "begin": str((begin - time_from).seconds),
+                    "end": str((end - time_from).seconds),
+                    "number": str(int(line*data["all_v_num"][i]/3))
+
+                }
+                file_object.write(space + sttool.get_flow_str(dic_flow))
+            file_object.write("</routes>")
+
 
 if __name__ == "__main__":
     path = "../data/副本沪苏浙高速交调数据20210119-20210219(1).csv"
-    path_result = "../data/weibo_period5_change.xlsx"
+    path_result = "../data/map/maptest6/road.rou.xml"
     deviceID = 71270320100006
     direction = 0
     date = "2021-01-26"
@@ -239,16 +320,13 @@ if __name__ == "__main__":
     weibo.df_read_csv(path)
     etc_data = weibo.select_data(deviceID, direction)  # 筛选合适的数据
     etc_data_20 = etc_data.get_alltype_perioddata(start_time, end_time, 20)  # 20min聚合
-    etc_data_5 = etc_data.get_alltype_perioddata(start_time, end_time, 5)  # 5min聚合
     df_PtoT = pd.DataFrame(columns=["start_time", "end_time", "PtoT"])  # 各个时段客货比关系
     df_PtoT["PtoT"] = [1, 4, 3 / 2, 2 / 3, 1 / 4, 1]  # 各个时段客货比关系
     df_PtoT.loc[:,["start_time", "end_time"]] = etc_data_20.loc[:,["start_time", "end_time"]]
-    etc_data_5 = PeriodDataUlit(etc_data_5)
-    etc_data_5.extend_all_flow(1.6, False)
-    df_PtoT = etc_data_5.get_P_to_T(df_PtoT)
-    etc_data_5.extend_PandT_flow(df_PtoT,False)
-    DaTaFrameTool.df_save_excel(etc_data_5.data,path_result)
-    # DaTaFrameTool.df_save_excel(df_PtoT, "test.xlsx")
+    etc_data_20 = PeriodDataUlit(etc_data_20)
+    etc_data_20.extend_all_flow(1.6, False)
+    df_PtoT = etc_data_20.get_P_to_T(df_PtoT)
+    etc_data_20.extend_PandT_flow(df_PtoT,False)  # 三车道交通量
+    etc_data_20 = etc_data_20.get_percent_eachtime()
+    PeriodDataUlit.change_to_sumo_flow(etc_data_20, path_result, start_time, 3)
 
-
-    print(1)
