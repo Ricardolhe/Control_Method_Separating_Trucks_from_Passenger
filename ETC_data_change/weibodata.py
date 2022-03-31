@@ -241,8 +241,8 @@ class PeriodDataUlit(object):
         :param data: 不同时段各种车型占比结果
         :return: 生成sumo车流文件
         """
-        from_seg = "predict_0"
-        to_seg = "contral_4"
+        from_seg = "start"
+        to_seg = "end"
         time_from = datetime.datetime.strptime(time_from, "%Y-%m-%d %H:%M:%S")
         space = "    "
 
@@ -259,6 +259,7 @@ class PeriodDataUlit(object):
                     "id": "s-car"+str(i),
                     "color": "yellow",
                     "vClass": "passenger",
+                    "maxSpeed": str(120/3.6),
                     "probability":str(data["s_v_num"][i])
                 }
                 file_object.write(2*space + sttool.get_vType_str(dic_s))
@@ -267,6 +268,7 @@ class PeriodDataUlit(object):
                     "id": "m-car"+str(i),
                     "color": "red",
                     "vClass": "coach",
+                    "maxSpeed": str(100 / 3.6),
                     "probability":str(data["m_v_num"][i])
                 }
                 file_object.write(2*space + sttool.get_vType_str(dic_m))
@@ -278,6 +280,7 @@ class PeriodDataUlit(object):
                     "length": "12.0",
                     "width" : "2.5",
                     "height": "4.0",
+                    "maxSpeed": str(90 / 3.6),
                     "probability":str(data["l_v_num"][i])
                 }
                 file_object.write(2*space + sttool.get_vType_str(dic_l))
@@ -286,6 +289,7 @@ class PeriodDataUlit(object):
                     "id": "sl-car"+str(i),
                     "color": "white",
                     "vClass": "trailer",
+                    "maxSpeed": str(80 / 3.6),
                     "probability":str(data["sl_v_num"][i])
                 }
                 file_object.write(2*space + sttool.get_vType_str(dic_sl))
@@ -321,10 +325,10 @@ if __name__ == "__main__":
     etc_data = weibo.select_data(deviceID, direction)  # 筛选合适的数据
     etc_data_20 = etc_data.get_alltype_perioddata(start_time, end_time, 20)  # 20min聚合
     df_PtoT = pd.DataFrame(columns=["start_time", "end_time", "PtoT"])  # 各个时段客货比关系
-    df_PtoT["PtoT"] = [1, 4, 3 / 2, 2 / 3, 1 / 4, 1]  # 各个时段客货比关系
+    df_PtoT["PtoT"] = [1, 4, 1/4, 3, 1 / 3, 1]  # 各个时段客货比关系
     df_PtoT.loc[:,["start_time", "end_time"]] = etc_data_20.loc[:,["start_time", "end_time"]]
     etc_data_20 = PeriodDataUlit(etc_data_20)
-    etc_data_20.extend_all_flow(1.6, False)
+    etc_data_20.extend_all_flow(2.0, False)
     df_PtoT = etc_data_20.get_P_to_T(df_PtoT)
     etc_data_20.extend_PandT_flow(df_PtoT,False)  # 三车道交通量
     etc_data_20 = etc_data_20.get_percent_eachtime()
