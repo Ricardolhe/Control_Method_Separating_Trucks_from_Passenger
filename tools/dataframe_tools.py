@@ -6,7 +6,7 @@
 # create-time: 2022/3/22
 import time
 import pandas as pd
-
+import json
 
 def df_save_excel(df_data, save_path):
     """
@@ -36,3 +36,24 @@ def df_load_excel(path_load):
     :return:生成数据表
     """
     return pd.read_excel(path_load, header=[0])
+
+
+def df_load_csv(path_load):
+    """
+    读取csv文件
+    :param path_load:存储数据的文件夹路径
+    :return:生成数据表
+    """
+    return pd.read_csv(path_load,header=[0])
+
+
+def df_save_json(filename,data):
+    with open(filename, 'w') as file_obj:
+        json.dump(data,file_obj)
+
+
+def df_load_json(filename):
+    with open(filename) as file_obj:
+        names = json.load(file_obj)
+    return names
+

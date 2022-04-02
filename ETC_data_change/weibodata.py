@@ -241,7 +241,7 @@ class PeriodDataUlit(object):
         :param data: 不同时段各种车型占比结果
         :return: 生成sumo车流文件
         """
-        from_seg = "start"
+        from_seg = "contral_0"
         to_seg = "end"
         time_from = datetime.datetime.strptime(time_from, "%Y-%m-%d %H:%M:%S")
         space = "    "
@@ -302,6 +302,7 @@ class PeriodDataUlit(object):
                     "to": to_seg,
                     "departLane": "random",
                     "departSpeed": "max",
+                    "departPos":"0",
                     "begin": str((begin - time_from).seconds),
                     "end": str((end - time_from).seconds),
                     "number": str(int(line*data["all_v_num"][i]/3))
