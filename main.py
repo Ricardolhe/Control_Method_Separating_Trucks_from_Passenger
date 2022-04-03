@@ -50,30 +50,6 @@ class Seg(object):
         return traci.edge.getLastStepMeanSpeed(self.name)
 
 
-class Road(object):
-    """
-    路段类
-    """
-
-    def __init__(self, name, n, L, num_line):
-        """
-        初始化
-        :param name: 路段名称
-        :param n: 路段seg个数
-        :param L: seg长度,m
-        """
-        self.name = name
-        self.num_line = num_line
-        self.n = n
-        self.L = L
-        self.types = ["passenger", "truck", "coach", "trailer"]
-        self.w = [1.0, 1.5, 2.0, 3.0]
-        self.segs = []
-        for i in range(n):
-            seg_name = self.name + "_" + str(i)
-            self.segs.append(Seg(seg_name))
-
-
 class E1Detector(object):
     """
     E1检测器类
@@ -97,6 +73,61 @@ class E1Detector(object):
         self.pass_Vehicles_types = []
 
 
+class Road(object):
+    """
+    路段类
+    """
+
+    def __init__(self, name, n, L, num_line):
+        """
+        初始化
+        :param name: 路段名称
+        :param n: 路段seg个数
+        :param L: seg长度,m
+        """
+        self.name = name
+        self.num_line = num_line
+        self.n = n
+        self.L = L
+        self.types = ["passenger", "truck", "coach", "trailer"]
+        self.w = [1.0, 1.5, 2.0, 3.0]
+        self.segs = []
+        for i in range(n):
+            seg_name = self.name + "_" + str(i)
+            self.segs.append(Seg(seg_name))
+
+    def get_seg_speed_density(self, seg_i):
+        """
+        返回指定路段当前各类车型的车流密度(pcu)与平均速度
+        :param seg_i: 路段编号
+        :return: 返回
+        """
+        seg = self.segs[seg_i]
+        vehs_id = traci.edge.getLastStepVehicleIDs(seg.name)
+        df_vehs = pd.DataFrame({"class": list(map(traci.vehicle.getVehicleClass, vehs_id)),
+                                "speed": list(map(traci.vehicle.getSpeed, vehs_id))})  # m/s
+        speed = []
+        density = []
+        for i in range(len(self.types)):
+            df_vtype = df_vehs.loc[df_vehs["class"] == self.types[i]]
+            speed.append(df_vtype["speed"].mean() * 3.6)  # 转为km/h
+            density.append(len(df_vtype) * self.w[i] / self.num_line / (self.L / 1000))  # pcu/km/line
+        return speed, density
+
+    def get_allseg_speed_density(self):
+        """
+        得到某一采样时刻各个seg的密度 pcu/ln/km 速度 km/h
+        :return:
+        """
+
+        seg_speed = pd.DataFrame(columns=self.types)
+        seg_density = pd.DataFrame(columns=self.types)
+        for i in range(self.n):
+            seg_speed.loc[i, :], seg_density.loc[i, :] = self.get_seg_speed_density(i)
+
+        return seg_speed, seg_density
+
+
 class ControlRoad(Road):
     """
     控制路段类，继承路段类
@@ -113,16 +144,6 @@ class ControlRoad(Road):
         self.back = 1  # 驾驶员反应时间
         self.control_step_i = {}  # 路段需要变更属性的seg与对应的step
         self.control_step_plan = {}  # 路段需要变更属性的step与对应的计划
-        self.E1Detectors = []
-        self.set_E1Detectors()
-
-    def set_E1Detectors(self):
-        for i in range(self.n + 1):
-            e1Detectors = []
-            for j in range(self.num_line):
-                e1Detector_name = "e1Detector_" + self.name + "_" + str(i) + "_" + str(j)
-                e1Detectors.append(E1Detector(e1Detector_name))
-            self.E1Detectors.append(e1Detectors)
 
     def change_seg_value(self, i, plan):
         """
@@ -162,6 +183,31 @@ class ControlRoad(Road):
         del self.control_step_i[step]
         del self.control_step_plan[step]
 
+
+class PredictRoad(Road):
+    """
+    预测路段类，继承路段类
+    """
+
+    def __init__(self, name, n, L, num_line):
+        """
+        初始化
+        :param name: 路段名称
+        :param n: 路段seg个数
+        :param L: seg长度
+        """
+        Road.__init__(self, name, n, L, num_line)
+        self.E1Detectors = []
+        self.set_E1Detectors()
+
+    def set_E1Detectors(self):
+        for i in range(self.n + 1):
+            e1Detectors = []
+            for j in range(self.num_line):
+                e1Detector_name = "e1Detector_" + self.name + "_" + str(i) + "_" + str(j)
+                e1Detectors.append(E1Detector(e1Detector_name))
+            self.E1Detectors.append(e1Detectors)
+
     def update_E1Detectors_vehID(self, i):
         """
         更新指定断面上的E1检测器的经过车辆id数据
@@ -190,24 +236,6 @@ class ControlRoad(Road):
             flow.append(sum(pass_veh == self.types[i]) * (self.w[i]))
         return flow
 
-    def get_seg_speed_density(self, seg_i):
-        """
-        返回指定路段当前各类车型的车流密度(pcu)与平均速度
-        :param seg_i: 路段编号
-        :return: 返回
-        """
-        seg = self.segs[seg_i]
-        vehs_id = traci.edge.getLastStepVehicleIDs(seg.name)
-        df_vehs = pd.DataFrame({"class": list(map(traci.vehicle.getVehicleClass, vehs_id)),
-                                "speed": list(map(traci.vehicle.getSpeed, vehs_id))})  # m/s
-        speed = []
-        density = []
-        for i in range(len(self.types)):
-            df_vtype = df_vehs.loc[df_vehs["class"] == self.types[i]]
-            speed.append(df_vtype["speed"].mean() * 3.6)  # 转为km/h
-            density.append(len(df_vtype) * self.w[i] / self.num_line / (self.L / 1000))  # pcu/km/line
-        return speed, density
-
     def get_allseg_flow(self):
         """
         得到某一采样时刻各个seg的流(没有转化为)
@@ -220,19 +248,6 @@ class ControlRoad(Road):
             # speed, density = self.get_seg_speed_density(i)
             seg_data.loc[i, :] = flow
         return seg_data
-
-    def get_allseg_speed_density(self):
-        """
-        得到某一采样时刻各个seg的密度 pcu/ln/km 速度 km/h
-        :return:
-        """
-
-        seg_speed = pd.DataFrame(columns=self.types)
-        seg_density = pd.DataFrame(columns=self.types)
-        for i in range(self.n):
-            seg_speed.loc[i, :], seg_density.loc[i, :] = self.get_seg_speed_density(i)
-
-        return seg_speed, seg_density
 
 
 class PlanPT(object):
@@ -328,13 +343,14 @@ class Controls(object):
     """
 
     def __init__(self, num_line):
-        self.sumoCmd = ["sumo", "-c", "data/map/maptest6/road.sumocfg"]
-        self.T = 9000
+        self.sumoCmd = ["sumo-gui", "-c", "data/map/maptest6/road.sumocfg"]
+        self.T = 7800
         self.num_line = num_line
-        self.delt_t = 600  # 控制周期
+        self.delt_t = 300  # 控制周期
         self.t_get_data = 30  # 采样时间
-        self.num_seg = 7
-        self.control_road = ControlRoad("contral", self.num_seg, 1000, num_line)
+        self.control_road = ControlRoad("contral", 4, 1000, num_line)
+        self.transition_road = Road("transition", 1, 500, num_line)
+        self.predict_road = PredictRoad("predict", 4, 1000, num_line)
         self.plan_pt = PlanPT(num_line)
         self.min_flow = 1210 * self.num_line  # pcu/h/line
 
@@ -343,7 +359,7 @@ class Controls(object):
         用于获取监测数据，用于参数标定源数据的获取
         """
         traci.start(self.sumoCmd)
-        no_t = 1500  # 只取中间5000的数据
+        no_t = 1800  # 只取中间4200的数据
         col1,col2,col3 =[],[],[]
         for i in self.control_road.types:
             col1.append(i+"_f")
@@ -444,17 +460,17 @@ class Controls(object):
         step = 0
         self.control_road.change_all_seg_value(now_plan)
         # 加载客货分道定时方案
-        index = 0
+        index = -1
         while step < self.T:
             traci.simulationStep()
             step += 1
 
             # 指定E1检测器更新数据
-            self.control_road.update_E1Detectors_vehID(index)
+            self.predict_road.update_E1Detectors_vehID(index)
 
             # 判断是否需要切换方案
             if step % self.delt_t == 0:
-                v_flow = self.control_road.get_E1Detectors_flow(index)
+                v_flow = self.predict_road.get_E1Detectors_flow(index)
                 v_flow = [flow * 3600 / self.delt_t for flow in v_flow]  # 转化为小时交通量
                 # 判断是否达到流量阈值
                 if sum(v_flow) > self.min_flow:
@@ -480,7 +496,7 @@ if __name__ == "__main__":
     # seg_data = dt.df_load_csv("data/seg_data.csv")
     # flow_in = dt.df_load_csv("data/flow_in.csv")
 
-    # control.feedback_controls(["T", "S", "P"])
+    control.feedback_controls(["T", "S", "P"])
     # control.static_controls()
     # control.time_controls(["T", "S", "P"],{3000:["T", "S", "S"],6000:["S", "S", "P"]})
     # plan_pt = PlanPT(5)

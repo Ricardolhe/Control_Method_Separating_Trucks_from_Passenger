@@ -241,7 +241,7 @@ class PeriodDataUlit(object):
         :param data: 不同时段各种车型占比结果
         :return: 生成sumo车流文件
         """
-        from_seg = "contral_0"
+        from_seg = "predict_0"
         to_seg = "end"
         time_from = datetime.datetime.strptime(time_from, "%Y-%m-%d %H:%M:%S")
         space = "    "
