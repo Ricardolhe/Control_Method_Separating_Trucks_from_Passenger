@@ -91,10 +91,30 @@ class Road(object):
         self.L = L
         self.types = ["passenger", "truck", "coach", "trailer"]
         self.w = [1.0, 1.5, 2.0, 3.0]
+        self.Vs = [120, 100, 90, 80]
         self.segs = []
         for i in range(n):
             seg_name = self.name + "_" + str(i)
             self.segs.append(Seg(seg_name))
+        self.col_seg_flow, self.col_seg_speed, self.col_seg_density = [], [], []
+
+        self.col_flow_in, self.col_density_out = [], []
+        self.col_list_flow, self.col_list_speed, self.col_list_density = [], [], []
+        # 定义要存储的列数据
+        for type_i in self.types:
+            self.col_flow_in.append("f_in_" + type_i)
+            self.col_density_out.append("d_out_" + type_i)
+
+        for i in range(self.n):
+            self.col_list_flow.append(["f_" + str(i) + "_" + type_i for type_i in self.types])
+            self.col_seg_flow = self.col_seg_flow + self.col_list_flow[-1]
+
+            self.col_list_speed.append(["s_" + str(i) + "_" + type_i for type_i in self.types])
+            self.col_seg_speed = self.col_seg_speed + self.col_list_speed[-1]
+
+            self.col_list_density.append(["d_" + str(i) + "_" + type_i for type_i in self.types])
+            self.col_seg_density = self.col_seg_density + self.col_list_density[-1]
+        self.col_seg = self.col_seg_flow + self.col_seg_speed + self.col_seg_density
 
     def get_seg_speed_density(self, seg_i):
         """
@@ -110,7 +130,10 @@ class Road(object):
         density = []
         for i in range(len(self.types)):
             df_vtype = df_vehs.loc[df_vehs["class"] == self.types[i]]
-            speed.append(df_vtype["speed"].mean() * 3.6)  # 转为km/h
+            if len(df_vtype["speed"]) ==0:
+                speed.append(self.Vs[i])
+            else:
+                speed.append(df_vtype["speed"].mean() * 3.6)  # 转为km/h
             density.append(len(df_vtype) * self.w[i] / self.num_line / (self.L / 1000))  # pcu/km/line
         return speed, density
 
@@ -119,12 +142,11 @@ class Road(object):
         得到某一采样时刻各个seg的密度 pcu/ln/km 速度 km/h
         :return:
         """
-
-        seg_speed = pd.DataFrame(columns=self.types)
-        seg_density = pd.DataFrame(columns=self.types)
+        l = self.n
+        seg_speed = pd.DataFrame(columns=self.col_seg_speed, index=["0"])
+        seg_density = pd.DataFrame(columns=self.col_seg_density, index=["0"])
         for i in range(self.n):
-            seg_speed.loc[i, :], seg_density.loc[i, :] = self.get_seg_speed_density(i)
-
+            seg_speed.iloc[0, l * i:l * i + l], seg_density.iloc[0, l * i:l * i + l] = self.get_seg_speed_density(i)
         return seg_speed, seg_density
 
 
@@ -241,13 +263,11 @@ class PredictRoad(Road):
         得到某一采样时刻各个seg的流(没有转化为)
         :return:
         """
-
-        seg_data = pd.DataFrame(columns=self.types)
+        l = self.n
+        seg_flow = pd.DataFrame(columns=self.col_seg_flow, index=["0"])
         for i in range(self.n):
-            flow = self.get_E1Detectors_flow(i + 1)
-            # speed, density = self.get_seg_speed_density(i)
-            seg_data.loc[i, :] = flow
-        return seg_data
+            seg_flow.iloc[0, l * i:l * i + l] = self.get_E1Detectors_flow(i + 1)  # 注意检测器安在下游，需要i+1
+        return seg_flow
 
 
 class PlanPT(object):
@@ -343,7 +363,7 @@ class Controls(object):
     """
 
     def __init__(self, num_line):
-        self.sumoCmd = ["sumo-gui", "-c", "data/map/maptest6/road.sumocfg"]
+        self.sumoCmd = ["sumo", "-c", "data/map/maptest6/road.sumocfg"]
         self.T = 7800
         self.num_line = num_line
         self.delt_t = 300  # 控制周期
@@ -358,64 +378,53 @@ class Controls(object):
         """
         用于获取监测数据，用于参数标定源数据的获取
         """
+        l_types = len(self.predict_road.types)
         traci.start(self.sumoCmd)
         no_t = 1800  # 只取中间4200的数据
-        col1,col2,col3 =[],[],[]
-        for i in self.control_road.types:
-            col1.append(i+"_f")
-            col2.append(i+"_s")
-            col3.append(i+"_d")
-        col = col1 + col2 + col3
-        seg_data = pd.DataFrame(columns=["n_t", "seg"] + col)
-        flow_in = pd.DataFrame(columns=self.control_road.types)
-        temp_data = pd.DataFrame(columns=["n_t", "seg"] + col)
-        n_t = 0
+        col_flow_in = self.predict_road.col_flow_in
+        col_density_out = self.predict_road.col_density_out
+        col = col_flow_in + self.predict_road.col_seg + col_density_out
+        seg_data = pd.DataFrame(columns=col, index=range(math.ceil((self.T - no_t * 2) / self.t_get_data)))
 
-        temp_data["seg"] = list(range(self.control_road.n))
-        temp_data["n_t"] = n_t
+        n_t = 0
 
         # 设置初始方案
         if first_plan != "":
             self.control_road.change_all_seg_value(first_plan)
-        for step in range(no_t):  # 1500s预热
+        for step in range(no_t):  # 预热
             traci.simulationStep()
 
-        temp_data[col2], temp_data[col3] = self.control_road.get_allseg_speed_density()
+        speed,density = self.predict_road.get_allseg_speed_density()
+        seg_data.loc[n_t, self.predict_road.col_seg_speed] = speed.values
+        seg_data.loc[n_t, self.predict_road.col_seg_density] = density.values
+        seg_data.loc[n_t, col_density_out] = self.transition_road.get_seg_speed_density(0)[1]
 
-        for step in range(1,self.T - 2*no_t+1):
+        for step in range(1, self.T - 2 * no_t + 1):
             traci.simulationStep()
 
             # 所有E1检测器更新数据
-            self.control_road.update_all_E1Detectors_vehID()
+            self.predict_road.update_all_E1Detectors_vehID()
 
             if step % self.t_get_data == 0:
-                temp_data[col1] = self.control_road.get_allseg_flow()
-                flow_in.loc[n_t,:] = self.control_road.get_E1Detectors_flow(0)
-                seg_data = pd.concat([seg_data,temp_data])
+                flow = self.predict_road.get_allseg_flow()
+                seg_data.loc[n_t, self.predict_road.col_seg_flow] = flow.values
+                seg_data.loc[n_t,col_flow_in] = self.predict_road.get_E1Detectors_flow(0)
                 n_t += 1
-                temp_data["n_t"] = n_t
-                temp_data[ col2], temp_data[col3] = self.control_road.get_allseg_speed_density()
+                speed, density = self.predict_road.get_allseg_speed_density()
+                seg_data.loc[n_t, self.predict_road.col_seg_speed] = speed.values
+                seg_data.loc[n_t, self.predict_road.col_seg_density] = density.values
+                seg_data.loc[n_t, col_density_out] = self.transition_road.get_seg_speed_density(0)[1]
+        seg_data.drop(len(seg_data)-1,inplace=True)
 
         for step in range(no_t):  # 1500s收尾
             traci.simulationStep()
 
         traci.close()
-        flow_in = flow_in*3600/self.t_get_data
-        seg_data[col1] = seg_data[col1]*3600/self.t_get_data  # 转为小时交通量
-        for i in range(len(self.control_road.types)):
-            seg_data.loc[seg_data[col2[i]].isna(), col2[i]] = self.plan_pt.Vs[i]
-        return  seg_data,flow_in
 
-        # 用于校正流密速图，但sumo自身发车一个车道最多3600，所以不用了
-        # seg_data = pd.DataFrame(columns=["density","flow"])
-        # seg_data["flow"] = seg_flow.sum(axis=1)*3600/self.t_get_data/self.num_line
-        # seg_data["density"] = seg_density.sum(axis=1)
-        # del seg_flow,seg_speed,seg_density
-        # seg_data = seg_data.loc[(seg_data["flow"]>0) & (seg_data["density"]>0)]
-        # return seg_data
-        # seg_data.plot.scatter(x='density', y='flow')
-        # plt.scatter(seg_data["density"], seg_data["flow"],s=1)
-        # plt.show()
+        # 转为小时交通量
+        seg_data[col_flow_in+self.predict_road.col_seg_flow] \
+            = seg_data[col_flow_in+self.predict_road.col_seg_flow] * 3600 / self.t_get_data
+        return seg_data
 
     def static_controls(self, first_plan=None):
         """
@@ -486,17 +495,15 @@ class Controls(object):
         traci.close()
 
 
-
 if __name__ == "__main__":
     control = Controls(3)
 
-    # seg_data,flow_in = control.controls_calibration()
-    # dt.df_save_csv(seg_data,"data/seg_data.csv")
-    # dt.df_save_csv(flow_in,"data/flow_in.csv")
-    # seg_data = dt.df_load_csv("data/seg_data.csv")
-    # flow_in = dt.df_load_csv("data/flow_in.csv")
+    seg_data1 = control.controls_calibration()
+    dt.df_save_csv(seg_data1,"data/seg_data.csv")
 
-    control.feedback_controls(["T", "S", "P"])
+
+
+    # control.feedback_controls(["T", "S", "P"])
     # control.static_controls()
     # control.time_controls(["T", "S", "P"],{3000:["T", "S", "S"],6000:["S", "S", "P"]})
     # plan_pt = PlanPT(5)
