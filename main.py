@@ -3,14 +3,14 @@
 # project: 毕业设计—SUMO的traci接口连接
 # user: Ricardo
 # Author: Ricardo
-# create time: 2022/2/14
+# create time: 2022/4/3
 import math
 import pandas as pd
 import traci
 import os, sys
 import numpy as np
 import tools.dataframe_tools as dt
-import json
+
 
 if 'SUMO_HOME' in os.environ:
     tools = os.path.join(os.environ['SUMO_HOME'], 'tools')
@@ -497,16 +497,8 @@ class Controls(object):
 
 if __name__ == "__main__":
     control = Controls(3)
+    # control.feedback_controls(["T", "S", "P"])  # 反馈控制
+    # control.static_controls() # 静态控制与吴控制
+    # control.time_controls(["T", "S", "P"],{3000:["T", "S", "S"],6000:["S", "S", "P"]}) # 定时控制
 
-    seg_data1 = control.controls_calibration()
-    dt.df_save_csv(seg_data1,"data/seg_data.csv")
 
-
-
-    # control.feedback_controls(["T", "S", "P"])
-    # control.static_controls()
-    # control.time_controls(["T", "S", "P"],{3000:["T", "S", "S"],6000:["S", "S", "P"]})
-    # plan_pt = PlanPT(5)
-    # v = [2000,800,800,500]
-    # result = plan_pt.pick_best_plan_feedback(v)
-    # print(1)
