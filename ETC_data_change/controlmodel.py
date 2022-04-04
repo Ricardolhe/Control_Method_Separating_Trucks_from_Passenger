@@ -1,29 +1,63 @@
 import numpy as np
 import pandas as pd
 import math
-from main import PredictRoad
+from ETC_data_change.pantdesgin import PlanPT
 
 
 class MPC(object):
     """MPC控制类"""
 
-    def __init__(self, Road):
-        self.col_d_out = Road.col_density_out
-        self.col_f_in = Road.col_flow_in
-        self.col_list_f = Road.col_list_flow
-        self.col_list_s = Road.col_list_speed
-        self.col_list_d = Road.col_list_density
-        self.Vs = Road.Vs  # 各车型自由流速度，也是限速
-        self.num_line = Road.num_line
+    def __init__(self, PredictRoad,ControlRoad):
+        """
+        :param PredictRoad: 预测路段对象
+        :param ControlRoad: 控制路段对象
+        """
+        self.ControlRoad = ControlRoad
+        self.col_d_out = PredictRoad.col_density_out
+        self.col_f_in = PredictRoad.col_flow_in
+        self.col_list_f = PredictRoad.col_list_flow
+        self.col_list_s = PredictRoad.col_list_speed
+        self.col_list_d = PredictRoad.col_list_density
+        self.Vs = PredictRoad.Vs  # 各车型自由流速度，也是限速
+        self.num_line = PredictRoad.num_line
         self.t_get_data = 30 / 3600  # 采样时间
-        self.num_seg = Road.n
-        self.L = Road.L / 1000  # km
+        self.num_seg = PredictRoad.n
+        self.L = PredictRoad.L / 1000  # km
         self.belta = 0.1
         self.density_c = 2200 / max(self.Vs)
         self.er = 0.013  # 误差系数
-        self.types = Road.types
-        self.col_seg_f = Road.col_seg_flow
-        self.col_seg_s = Road.col_seg_speed
+        self.types = PredictRoad.types
+        self.col_seg_f = PredictRoad.col_seg_flow
+        self.col_seg_s = PredictRoad.col_seg_speed
+        parameter_dic = {
+            3:{
+                "arf":[1.00053,2.87520,2.37517,1.64791],
+                "fa":[54.13789,13.25581,37.12644,40.12523],
+                "tao":[10.05916,55.86172,32.79175,44.25116],
+                "k":[32.57657,23.96529,40.90648,20.14827]
+            },
+            4:{
+                "arf": [1.00053, 2.87520, 2.37517, 1.64791],
+                "fa": [54.13789, 13.25581, 37.12644, 40.12523],
+                "tao": [10.05916, 55.86172, 32.79175, 44.25116],
+                "k": [32.57657, 23.96529, 40.90648, 20.14827]
+            },
+            5:{
+                "arf": [1.00053, 2.87520, 2.37517, 1.64791],
+                "fa": [54.13789, 13.25581, 37.12644, 40.12523],
+                "tao": [10.05916, 55.86172, 32.79175, 44.25116],
+                "k": [32.57657, 23.96529, 40.90648, 20.14827]
+            }
+        }
+        self.parameter = parameter_dic[self.num_line]
+
+    def set_parameter(self,dic_p):
+        """
+        设置交通流模型参数
+        :param dic_p:
+        :return:
+        """
+        self.parameter = dic_p
 
     def predict(self, arf, fa, tao, k, df_seg_data):
         df_predict = df_seg_data.copy(deep=True)
@@ -72,6 +106,7 @@ class MPC(object):
             # 预测流量
             df_predict[self.col_list_f[i]] = self.num_line * df_predict[self.col_list_d[i]].values \
                                           * df_predict[self.col_list_s[i]].values
+
         df_predict[df_predict < 0] = 0
         return df_predict
 
@@ -90,6 +125,91 @@ class MPC(object):
                  + sum(((seg_predict[self.col_seg_s] - seg_true[self.col_seg_s]) ** 2).sum())
         result = result / (len(seg_predict) - 1) / self.num_seg
         return result
+
+    # 指数平滑算法
+    @ staticmethod
+    def exponential_smoothing(alpha, s):
+        '''
+        一次指数平滑
+        :param alpha:  平滑系数
+        :param s:      数据， list
+        :return:       返回一次指数平滑模型参数， list
+        '''
+        s_temp = [0 for i in range(len(s))]
+        s_temp[0] = (s[0] + s[1] + s[2]) / 3
+        for i in range(1, len(s)):
+            s_temp[i] = alpha * s[i] + (1 - alpha) * s_temp[i - 1]
+        return s_temp
+
+    @staticmethod
+    def calibration_alpha(arr):
+        '''
+        :param arr:  矩阵，ndarray
+        :return:    返回一次指数平滑参数，ndarray，个数等于列数
+        '''
+        l = arr.shape[1]
+        l_arr = len(arr)
+        alpha = np.zeros(l)
+        y_pre_last = np.zeros(l) # 最后一次的预测值
+        for i in range(l):
+            error= np.zeros(9)
+            pre_last = np.zeros(9)
+            for j in range(1,10,1):
+                s_true = arr[:,i]
+                s_pre = np.array(MPC.exponential_smoothing(j/10,list(s_true)))
+                error[j-1] = sum((s_true-s_pre)**2/l_arr)
+                pre_last[j-1] = s_pre[-1]
+            ind = np.argmin(error)
+            alpha[i] = (ind+1)/10
+            y_pre_last[i] = pre_last[ind]
+        return alpha,y_pre_last
+
+    def get_plan(self, seg_data, flow_in, delt_t,predict_time):
+        """
+        利用mpc控制求解客货分道方案
+        :param delt_t: 采样时间
+        :param predict_time: 预测时长,s
+        :param seg_data: 当前时间交通流状态数据, dataframe
+        :param flow_in: 进入车流，每个采样时间采样一次,ndarray
+        :return:
+        """
+        arf = self.parameter["arf"]
+        fa = self.parameter["fa"]
+        tao = self.parameter["tao"]
+        k = self.parameter["k"]
+
+        # 求解一次指数平滑系数与当前时间的进入流量预测值
+        alpha,flow_in_pre = self.calibration_alpha(flow_in)
+        flow_in_true = flow_in[-1]
+        plan_pt = PlanPT(self.ControlRoad)
+
+        flow_in_pre = alpha * flow_in_true + (1 - alpha) * flow_in_pre   # flow_in预测值，作为后8min的交通量
+
+        plans = plan_pt.plans
+        l_plans = len(plans)
+        impedance = np.zeros(l_plans)
+
+        sum_flow = 0
+        seg_data = self.predict(arf, fa, tao, k, seg_data.copy())
+        flow_out = seg_data[self.col_list_f[-1]].values.tolist()[0]
+        sum_flow += sum(flow_out)
+        for i in range(l_plans):
+            impedance[i] = impedance[i] + plan_pt.BRP(flow_out, plans[i])
+
+        # seg_data.loc[0,self.col_f_in] = flow_in_pre
+        seg_data.loc[0, self.col_f_in] = np.mean(flow_in,axis=0)
+        t = delt_t  # 当前时间
+
+        while t < predict_time:
+            seg_data = self.predict(arf, fa, tao, k, seg_data.copy())
+            flow_out = seg_data[self.col_list_f[-1]].values.tolist()[0]
+            sum_flow += sum(flow_out)
+            for i in range(l_plans):
+                impedance[i] = impedance[i] + plan_pt.BRP(flow_out, plans[i])
+            t = t + delt_t
+
+        ind = np.argmin(impedance)
+        return plans[ind],sum_flow * delt_t /predict_time
 
     def calibration(self, seg_data):
         """
