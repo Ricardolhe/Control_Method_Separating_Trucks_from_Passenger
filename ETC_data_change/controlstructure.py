@@ -169,6 +169,7 @@ class ControlRoad(Road):
         self.control_step_i = {}  # 路段需要变更属性的seg与对应的step
         self.control_step_plan = {}  # 路段需要变更属性的step与对应的计划
 
+
     def change_seg_value(self, i, plan):
         """
         改变具体seg的客货属性
@@ -277,9 +278,9 @@ class Controls(object):
     不同控制方法的类
     """
 
-    def __init__(self, num_line):
-        self.sumoCmd = ["sumo", "-c", "data/map/maptest6/road.sumocfg"]
-        self.T = 7800
+    def __init__(self, num_line,sumoCmd):
+        self.sumoCmd = sumoCmd
+        self.T = 9000
         self.num_line = num_line
         self.delt_t = 300  # 控制时长，5min
         self.t_get_data = 30  # 采样间隔
@@ -460,7 +461,6 @@ class Controls(object):
                     = seg_data.loc[0,self.predict_road.col_seg_flow] * 3600 / self.t_get_data
 
                 plan,sum_flow = model.get_plan(seg_data,np.array(flow_in),self.t_get_data,self.predict_time)
-                print(plan)
                 # 判断是否达到流量阈值
                 if sum_flow > self.min_flow:
                     if plan != now_plan:

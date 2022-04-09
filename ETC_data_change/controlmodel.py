@@ -37,16 +37,16 @@ class MPC(object):
                 "k":[32.57657,23.96529,40.90648,20.14827]
             },
             4:{
-                "arf": [1.00053, 2.87520, 2.37517, 1.64791],
-                "fa": [54.13789, 13.25581, 37.12644, 40.12523],
-                "tao": [10.05916, 55.86172, 32.79175, 44.25116],
-                "k": [32.57657, 23.96529, 40.90648, 20.14827]
+                "arf": [1.02596, 1.35997, 2.49355, 3.35026],
+                "fa": [55.60114, 29.80902, 38.50539, 14.62797],
+                "tao": [10.07734, 18.67628, 40.33616, 44.081815],
+                "k": [10.06705, 18.37809, 48.82823, 56.28008]
             },
             5:{
-                "arf": [1.00053, 2.87520, 2.37517, 1.64791],
-                "fa": [54.13789, 13.25581, 37.12644, 40.12523],
-                "tao": [10.05916, 55.86172, 32.79175, 44.25116],
-                "k": [32.57657, 23.96529, 40.90648, 20.14827]
+                "arf": [1.01953, 1.198916, 2.21832, 1.215695],
+                "fa": [44.43467, 13.65673, 38.54959, 45.91213],
+                "tao": [10.02498, 26.80913, 54.837002, 59.01598],
+                "k": [24.05780, 11.50813, 22.37396, 55.802196]
             }
         }
         self.parameter = parameter_dic[self.num_line]
@@ -196,8 +196,8 @@ class MPC(object):
         for i in range(l_plans):
             impedance[i] = impedance[i] + plan_pt.BRP(flow_out, plans[i])
 
-        # seg_data.loc[0,self.col_f_in] = flow_in_pre
-        seg_data.loc[0, self.col_f_in] = np.mean(flow_in,axis=0)
+        seg_data.loc[0,self.col_f_in] = flow_in_pre
+        # seg_data.loc[0, self.col_f_in] = np.mean(flow_in,axis=0)
         t = delt_t  # 当前时间
 
         while t < predict_time:
@@ -209,6 +209,8 @@ class MPC(object):
             t = t + delt_t
 
         ind = np.argmin(impedance)
+        print(plans[ind] )
+        print(flow_out )
         return plans[ind],sum_flow * delt_t /predict_time
 
     def calibration(self, seg_data):
