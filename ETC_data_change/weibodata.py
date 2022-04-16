@@ -142,7 +142,7 @@ class PeriodDataUlit(object):
 
     def __init__(self, data=None):
         self.data = data
-        self.pcu =[1, 1.5, 2.0, 3.0]
+        self.pcu = [1.0, 1.0, 1.0, 1.0]
 
     def df_read_excel(self, path1):
         data = pd.read_excel(path1, header=[0])
@@ -231,6 +231,27 @@ class PeriodDataUlit(object):
         data = data.loc[:,:"sl_v_num"]
         return data
 
+    def get_num_eachtime(self):
+        """
+        计算每一时段各种车型占比
+        :return: 各种车型占比结果
+        """
+        p = [6,2,1]  # 三种货车比例
+        data = self.data.copy(deep=True)
+        # data.loc[:,"s_v_num":"sl_v_num"] = data.loc[:,"s_v_num":"sl_v_num"].div(data["all_v_num"],axis=0)
+
+        # num_P = data["m_v_num"] * self.pcu[1] + data["l_v_num"] * self.pcu[2] + data["sl_v_num"] * self.pcu[3]
+        # s=[]
+        # for  i in range(len(p)):
+        #     s.append(p[i]*self.pcu[i+1])
+        # sum_s = sum(s)
+        # data["m_v_num"] = num_P/sum_s*p[0]
+        # data["l_v_num"] = num_P / sum_s * p[1]
+        # data["sl_v_num"] = num_P / sum_s * p[2]
+        # data["all_v_num"]  = data["m_v_num"]  + data["l_v_num"] + data["sl_v_num"] + data["s_v_num"]
+        data = data.loc[:,:"sl_v_num"]
+        return data
+
     @staticmethod
     def change_to_sumo_flow(data, path_sumo, time_from, line=3):
         """
@@ -259,6 +280,7 @@ class PeriodDataUlit(object):
                     "id": "s-car"+str(i),
                     "color": "yellow",
                     "vClass": "passenger",
+                    "length": "10.0",
                     "maxSpeed": str(120/3.6),
                     "probability":str(data["s_v_num"][i])
                 }
@@ -268,6 +290,7 @@ class PeriodDataUlit(object):
                     "id": "m-car"+str(i),
                     "color": "red",
                     "vClass": "coach",
+                    "length": "7.5",
                     "maxSpeed": str(100 / 3.6),
                     "probability":str(data["m_v_num"][i])
                 }
@@ -277,7 +300,7 @@ class PeriodDataUlit(object):
                     "id": "l-car"+str(i),
                     "color": "magenta",
                     "vClass": "truck",
-                    "length": "12.0",
+                    "length": "10.0",
                     "width" : "2.5",
                     "height": "4.0",
                     "maxSpeed": str(90 / 3.6),
@@ -289,6 +312,7 @@ class PeriodDataUlit(object):
                     "id": "sl-car"+str(i),
                     "color": "white",
                     "vClass": "trailer",
+                    "length": "15.0",
                     "maxSpeed": str(80 / 3.6),
                     "probability":str(data["sl_v_num"][i])
                 }
@@ -310,6 +334,127 @@ class PeriodDataUlit(object):
                 }
                 file_object.write(space + sttool.get_flow_str(dic_flow))
             file_object.write("</routes>")
+
+    @staticmethod
+    def change_to_sumo_flow_num(data, path_sumo, time_from, line=3):
+        """
+        用于生成sumo仿真软件的车流
+        :param start_time: 开始时间，标准时间格式 "2016-05-05 20:28:00"
+        :param line: 车道数
+        :param path_sumo: 车流文件
+        :param data: 不同时段各种车型车辆数文件
+        :return: 生成sumo车流文件
+        """
+        from_seg = "predict_0"
+        to_seg = "end"
+        time_from = datetime.datetime.strptime(time_from, "%Y-%m-%d %H:%M:%S")
+        space = "    "
+        with open(path_sumo, 'w') as file_object:
+            file_object.write("<routes>\n")
+
+            dic_s = {
+                "id": "s-car" ,
+                "color": "yellow",
+                "vClass": "passenger",
+                "length": "5.0",
+                "maxSpeed": str(120 / 3.6),
+            }
+            file_object.write(space + sttool.get_vType_str(dic_s))
+
+            dic_m = {
+                "id": "m-car" ,
+                "color": "red",
+                "vClass": "coach",
+                "length": "7.5",
+                "maxSpeed": str(100 / 3.6),
+            }
+            file_object.write(space + sttool.get_vType_str(dic_m))
+
+            dic_l = {
+                "id": "l-car" ,
+                "color": "magenta",
+                "vClass": "truck",
+                "length": "10.0",
+                "width": "2.5",
+                "height": "4.0",
+                "maxSpeed": str(90 / 3.6),
+            }
+            file_object.write(space + sttool.get_vType_str(dic_l))
+
+            dic_sl = {
+                "id": "sl-car",
+                "color": "white",
+                "vClass": "trailer",
+                "length": "15.0",
+                "maxSpeed": str(80 / 3.6),
+            }
+            file_object.write(space + sttool.get_vType_str(dic_sl))
+
+
+            for i in range(len(data)):
+                flow = "flow" + str(i)
+                begin = data["start_time"][i]
+                end = data["end_time"][i]
+
+                dic_s_flow ={
+                    "id": "flow_s" + str(i),
+                    "type": "s-car",
+                    "from": from_seg,
+                    "to": to_seg,
+                    "departLane": "free",
+                    "departSpeed": "max",
+                    "departPos":"0",
+                    "begin": str((begin - time_from).seconds),
+                    "end": str((end - time_from).seconds),
+                    "number": str(int(line*data["s_v_num"][i]/3))
+                }
+                file_object.write(space + sttool.get_flow_str(dic_s_flow))
+
+                dic_m_flow ={
+                    "id": "flow_m" + str(i),
+                    "type": "m-car",
+                    "from": from_seg,
+                    "to": to_seg,
+                    "departLane": "random",
+                    "departSpeed": "max",
+                    "departPos":"0",
+                    "begin": str((begin - time_from).seconds),
+                    "end": str((end - time_from).seconds),
+                    "number": str(int(line*data["m_v_num"][i]/3))
+                }
+                file_object.write(space + sttool.get_flow_str(dic_m_flow))
+
+                dic_l_flow ={
+                    "id": "flow_l" + str(i),
+                    "type": "l-car",
+                    "from": from_seg,
+                    "to": to_seg,
+                    "departLane": "random",
+                    "departSpeed": "max",
+                    "departPos":"0",
+                    "begin": str((begin - time_from).seconds),
+                    "end": str((end - time_from).seconds),
+                    "number": str(int(line*data["l_v_num"][i]/3))
+                }
+                file_object.write(space + sttool.get_flow_str(dic_l_flow))
+
+
+                dic_sl_flow ={
+                    "id": "flow_sl" + str(i),
+                    "type": "sl-car",
+                    "from": from_seg,
+                    "to": to_seg,
+                    "departLane": "random",
+                    "departSpeed": "max",
+                    "departPos":"0",
+                    "begin": str((begin - time_from).seconds),
+                    "end": str((end - time_from).seconds),
+                    "number": str(int(line*data["sl_v_num"][i]/3))
+                }
+                file_object.write(space + sttool.get_flow_str(dic_sl_flow))
+
+            file_object.write("</routes>")
+
 
 
 

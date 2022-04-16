@@ -29,7 +29,7 @@ class Seg(object):
     def __init__(self, name):
         self.name = name
         P = ["passenger"]
-        T = ["truck", "coach", "trailer"]
+        T = ["coach", "truck", "trailer"]
         S = P + T
         self.dic = {
             "P": P,
@@ -91,9 +91,10 @@ class Road(object):
         self.num_line = num_line
         self.n = n
         self.L = L
-        self.types = ["passenger", "truck", "coach", "trailer"]
+        self.types = ["passenger", "coach","truck", "trailer"]
         self.w = [1.0, 1.5, 2.0, 3.0]
         self.Vs = [120, 100, 90, 80]
+        self.back = 5  # 备用时间
         self.segs = []
         for i in range(n):
             seg_name = self.name + "_" + str(i)
@@ -151,6 +152,12 @@ class Road(object):
             seg_speed.iloc[0, l * i:l * i + l], seg_density.iloc[0, l * i:l * i + l] = self.get_seg_speed_density(i)
         return seg_speed, seg_density
 
+    def get_step_new(self,step,i):
+        speed,density = self.get_seg_speed_density(i)
+        speed =sum(np.array(speed)*np.array(density))/sum(np.array(density))
+        step_new = step + math.ceil(self.L / speed) + self.back
+        return step_new
+
 
 class ControlRoad(Road):
     """
@@ -165,10 +172,42 @@ class ControlRoad(Road):
         :param L: seg长度
         """
         Road.__init__(self, name, n, L, num_line)
-        self.back = 1  # 驾驶员反应时间
         self.control_step_i = {}  # 路段需要变更属性的seg与对应的step
         self.control_step_plan = {}  # 路段需要变更属性的step与对应的计划
+        self.in_E1Detectors = []
+        self.out_E1Detectors = []
 
+        for i in range(self.num_line):
+            e1Detector_name_in = "e1Detector_" + "in" + "_" + str(i)
+            e1Detector_name_out = "e1Detector_" + "out" + "_" + str(i)
+            self.in_E1Detectors.append(E1Detector(e1Detector_name_in))
+            self.out_E1Detectors.append(E1Detector(e1Detector_name_out))
+
+    def get_E1Detectors_vehID(self):
+        """
+        更新指定断面上的E1检测器的经过车辆id数据
+        """
+        in_veh = []
+        in_veh_types = []
+        out_veh = []
+        out_veh_types = []
+        for i  in range(self.num_line):
+            in_Detectors = self.in_E1Detectors[i]
+            new_vehicles = list(traci.inductionloop.getLastStepVehicleIDs(in_Detectors.name))
+            in_veh = in_veh + new_vehicles
+            in_veh_types = in_veh_types + list(map(traci.vehicle.getVehicleClass, new_vehicles))
+
+            out_Detectors = self.out_E1Detectors[i]
+            new_vehicles = list(traci.inductionloop.getLastStepVehicleIDs(out_Detectors.name))
+            try:
+
+                out_veh_types = out_veh_types + list(map(traci.vehicle.getVehicleClass, new_vehicles))
+                out_veh = out_veh + new_vehicles
+            except (traci.exceptions.TraCIException):
+
+                print("车辆已经出去了，无视")
+
+        return  in_veh,in_veh_types,out_veh,out_veh_types
 
     def change_seg_value(self, i, plan):
         """
@@ -193,7 +232,9 @@ class ControlRoad(Road):
         plan = self.control_step_plan[step]
         seg = self.segs[i]
         seg.change_seg_value(plan)
-        speed = seg.get_seg_ave_speed()  # 获得清尾seg的平均速度 m/s
+        speed,density = self.get_seg_speed_density(i)
+        speed =sum(np.array(speed)*np.array(density))/sum(np.array(density))
+        # speed = seg.get_seg_ave_speed()  # 获得清尾seg的平均速度 m/s
         if i + 1 < self.n:
             step_new = step + math.ceil(self.L / speed) + self.back
             self.control_step_i[step_new] = i + 1
@@ -280,15 +321,78 @@ class Controls(object):
 
     def __init__(self, num_line,sumoCmd):
         self.sumoCmd = sumoCmd
-        self.T = 9000
+        self.T = 7200
         self.num_line = num_line
         self.delt_t = 300  # 控制时长，5min
         self.t_get_data = 30  # 采样间隔
+        self.no_change =900
         self.control_road = ControlRoad("contral", 4, 1000, num_line)
         self.transition_road = Road("transition", 1, 500, num_line)
         self.predict_road = PredictRoad("predict", 4, 1000, num_line)
         self.min_flow = 1210 * self.num_line  # pcu/h/line
         self.predict_time = 480 # 预测时长，8min
+        self.in_veh = []
+        self.in_veh_types = []
+        self.in_veh_time = []
+        self.out_veh = []
+        self.out_veh_types = []
+        self.out_veh_time = []
+        self.df_data = pd.DataFrame()
+
+    def clear_data(self):
+        self.in_veh = []
+        self.in_veh_types = []
+        self.in_veh_time = []
+        self.out_veh = []
+        self.out_veh_types = []
+        self.out_veh_time = []
+        self.df_data = pd.DataFrame()
+
+    def save_data(self,step):
+        # 记录控住段数据
+        veh_data = self.control_road.get_E1Detectors_vehID()
+        self.in_veh = self.in_veh + veh_data[0]
+        self.in_veh_types = self.in_veh_types + veh_data[1]
+        self.in_veh_time = self.in_veh_time + [step] * len(veh_data[0])
+        self.out_veh = self.out_veh + veh_data[2]
+        self.out_veh_types = self.out_veh_types + veh_data[3]
+        self.out_veh_time = self.out_veh_time + [step] * len(veh_data[2])
+
+    def solve_data(self):
+        # 处理控住段数据
+        df_in = pd.DataFrame({
+            "veh":self.in_veh,
+            "vclass":self.in_veh_types,
+            "time":self.in_veh_time
+        })
+
+        df_out = pd.DataFrame({
+            "veh":self.out_veh,
+            "vclass":self.out_veh_types,
+            "time":self.out_veh_time
+        })
+        df_in = df_in.drop_duplicates(subset=['veh'], keep='first')
+        df_in = df_in.sort_values(by=['veh']).reset_index(drop=True)
+
+        df_out = df_out.drop_duplicates(subset=['veh'], keep='last')
+        df_out = df_out.sort_values(by=['veh']).reset_index(drop=True)
+        df_data = pd.merge(df_in, df_out, on='veh')
+        del df_data["vclass_y"]
+        for  i  in range(len(self.control_road.types)):
+            df_data.loc[df_data["vclass_x"]==self.control_road.types[i],"pcu"] = self.control_road.w[i]
+        self.df_data = df_data
+
+    def look_data(self):
+        """
+        分析数据
+        :return:
+        """
+        df_data = self.df_data.copy()
+        df_data["travel_time"] = df_data["time_y"] - df_data["time_x"]  # 得到速度
+        travel_time = sum(df_data["travel_time"] * df_data["pcu"])/sum(df_data["pcu"])
+        print(travel_time)
+        return df_data
+
 
     def controls_calibration(self, first_plan=""):
         """
@@ -349,12 +453,30 @@ class Controls(object):
         traci.start(self.sumoCmd)
         step = 0
         # 设置初始方案
+
+        while step < self.no_change:
+            traci.simulationStep()
+            step += 1
+
+            # 更新控制段数据
+            self.save_data(step)
+
         if first_plan is not None:
             self.control_road.change_all_seg_value(first_plan)
         while step < self.T:
             traci.simulationStep()
             step += 1
+
+            # 更新控制段数据
+            self.save_data(step)
         traci.close()
+        # 处理数据
+        self.solve_data()
+        # 分析数据
+        data = self.look_data()
+        self.clear_data()
+        return data
+
 
     def time_controls(self, first_plan, dic_plan):
         """
@@ -374,7 +496,18 @@ class Controls(object):
             # 判断是否需要更新控制路段的seg属性
             if step in self.control_road.control_step_i.keys():
                 self.control_road.change_road_value(step)
+
+
+            # 更新控制段数据
+            self.save_data(step)
         traci.close()
+        # 处理数据
+        self.solve_data()
+        # 分析数据
+        data = self.look_data()
+        self.clear_data()
+        return data
+
 
     def feedback_controls(self, now_plan):
         """
@@ -399,17 +532,26 @@ class Controls(object):
                 v_flow = self.predict_road.get_E1Detectors_flow(index)
                 v_flow = [flow * 3600 / self.delt_t for flow in v_flow]  # 转化为小时交通量
                 # 判断是否达到流量阈值
-                if sum(v_flow) > self.min_flow:
+                if sum(v_flow) > self.min_flow and step > self.no_change:
                     plan = plan_pt.pick_best_plan_feedback(v_flow)
                     if plan != now_plan:
-                        self.control_road.add_change_i_seg(step, 0, plan)  # 添加切换计划
-                        self.control_road.change_road_value(step)  # 分段切换
+                        step_new = self.transition_road.get_step_new(step,0)
+                        self.control_road.add_change_i_seg(step_new, 0, plan)  # 添加切换计划
                         now_plan = plan
 
             # 判断是否有哪段seg需要切换（适用于分段切换的策略）
             if step in self.control_road.control_step_i.keys():
                 self.control_road.change_road_value(step)
+
+            # 更新控制段数据
+            self.save_data(step)
         traci.close()
+        # 处理数据
+        self.solve_data()
+        # 分析数据
+        data = self.look_data()
+        self.clear_data()
+        return data
 
     def mpc_controls(self, now_plan):
         """
@@ -432,15 +574,16 @@ class Controls(object):
             step += 1
 
             # E1检测器更新数据，记录初始路段进入流量
-            self.predict_road.update_E1Detectors_vehID(0)
+            self.predict_road.update_all_E1Detectors_vehID()
 
             # 每个采样周期记录初始路段进入流量
             if step % self.t_get_data == 0:
                 flow_temp = self.predict_road.get_E1Detectors_flow(0)
                 flow_in.append([flow * 3600 / self.t_get_data for flow in flow_temp])
-                for seg_i in range(1,self.predict_road.n+1):
-                    # 每个路段下游的E1检测器更新数据
-                    self.predict_road.update_E1Detectors_vehID(seg_i)
+                flow = self.predict_road.get_allseg_flow()
+                # for seg_i in range(1,self.predict_road.n+1):
+                #     # 每个路段下游的E1检测器更新数据
+                #     self.predict_road.update_E1Detectors_vehID(seg_i)
 
             # 判断是否需要切换方案
             if step % self.delt_t == 0:
@@ -453,7 +596,7 @@ class Controls(object):
             if step == (n_step * self.delt_t + self.t_get_data):
                 # 获取当前交通状态，流量
                 n_step += 1
-                flow = self.predict_road.get_allseg_flow()  # 获取所有seg流量
+                # flow = self.predict_road.get_allseg_flow()  # 获取所有seg流量
                 seg_data.loc[0, self.predict_road.col_seg_flow] = flow.values
                 seg_data.loc[0,col_flow_in] = flow_in[-1]
                 # 转为小时交通量
@@ -462,13 +605,23 @@ class Controls(object):
 
                 plan,sum_flow = model.get_plan(seg_data,np.array(flow_in),self.t_get_data,self.predict_time)
                 # 判断是否达到流量阈值
-                if sum_flow > self.min_flow:
+                if sum_flow > self.min_flow and step > self.no_change:
                     if plan != now_plan:
-                        self.control_road.add_change_i_seg(step, 0, plan)  # 添加切换计划
-                        self.control_road.change_road_value(step)  # 分段切换
+                        step_new = self.transition_road.get_step_new(step,0)
+                        self.control_road.add_change_i_seg(step_new, 0, plan)  # 添加切换计划
+
                         now_plan = plan
+                flow_in =[]
 
             # 判断是否有哪段seg需要切换（适用于分段切换的策略）
             if step in self.control_road.control_step_i.keys():
                 self.control_road.change_road_value(step)
+            # 更新控制段数据
+            self.save_data(step)
         traci.close()
+        # 处理数据
+        self.solve_data()
+        # 分析数据
+        data = self.look_data()
+        self.clear_data()
+        return data

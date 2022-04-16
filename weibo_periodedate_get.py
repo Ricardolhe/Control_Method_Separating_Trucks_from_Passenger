@@ -19,13 +19,15 @@ if __name__ == "__main__":
     etc_data = weibo.select_data(deviceID, direction)  # 筛选合适的数据
     etc_data_20 = etc_data.get_alltype_perioddata(start_time, end_time, 20)  # 20min聚合
     df_PtoT = pd.DataFrame(columns=["start_time", "end_time", "PtoT"])  # 各个时段客货比关系
-    df_PtoT["PtoT"] = [5, 1/5, 4, 1/4, 3, 1/3]  # 各个时段客货比关系
+    df_PtoT["PtoT"] = [1, 1/4, 4, 1/3, 3, 1]  # 各个时段客货比关系
+    # df_PtoT["PtoT"] = [1/6]*6  # 各个时段客货比关系
     df_PtoT.loc[:,["start_time", "end_time"]] = etc_data_20.loc[:,["start_time", "end_time"]]
     etc_data_20 = PeriodDataUlit(etc_data_20)
-    etc_data_20.extend_all_flow(2.0, False)
+    etc_data_20.extend_all_flow(1.6, False)
     df_PtoT = etc_data_20.get_P_to_T(df_PtoT)
     etc_data_20.extend_PandT_flow(df_PtoT,False)  # 三车道交通量
-    etc_data_20 = etc_data_20.get_percent_eachtime()
-    PeriodDataUlit.change_to_sumo_flow(etc_data_20, path_result_3, start_time, 3)
-    PeriodDataUlit.change_to_sumo_flow(etc_data_20, path_result_4, start_time, 4)
-    PeriodDataUlit.change_to_sumo_flow(etc_data_20, path_result_5, start_time, 5)
+    # etc_data_20=etc_data_20.get_percent_eachtime()
+    etc_data_20 = etc_data_20.get_num_eachtime()
+    PeriodDataUlit.change_to_sumo_flow_num(etc_data_20, path_result_3, start_time, 3)
+    PeriodDataUlit.change_to_sumo_flow_num(etc_data_20, path_result_4, start_time, 4)
+    PeriodDataUlit.change_to_sumo_flow_num(etc_data_20, path_result_5, start_time, 5)

@@ -6,26 +6,35 @@ class PlanPT(object):
 
     def __init__(self, Road):
         plan_dic = {
-            3: [["S", "S", "P"],
-                ["T", "S", "P"],
-                ["T", "S", "S"]],
-            4: [["S", "S", "P", "P"],
-                ["T", "S", "P", "P"],
-                ["T", "T", "S", "P"],
-                ["T", "T", "S", "S"]],
+            3: [["S", "S", "P"],  # 3:2
+                ["T", "S", "P"],   # 2:2
+                ["T", "S", "S"]], # 2:3
+            4: [["S", "S", "P", "P"], # 4:2
+                ["T", "S", "P", "P"], # 3:2
+                ["T", "T", "S", "P"], # 2:3
+                ["T", "T", "S", "S"]],# 2:4
             5: [["S", "S", "P", "P", "P"],
                 ["T", "S", "P", "P", "P"],
                 ["T", "T", "S", "P", "P"],
                 ["T", "T", "T", "S", "P"],
                 ["T", "T", "T", "S", "S"]]
+            # 3: [["S", "S", "P"],
+            #     ["T", "S", "P"]],
+            # 4: [["S", "S", "P", "P"],
+            #     ["T", "S", "P", "P"],
+            #     ["T", "T", "S", "P"]],
+            # 5: [["S", "S", "P", "P", "P"],
+            #     ["T", "S", "P", "P", "P"],
+            #     ["T", "T", "S", "P", "P"],
+            #     ["T", "T", "T", "S", "P"]]
         }
         self.plans = plan_dic[Road.num_line]
         self.a = 0.15
         self.b = 4
         self.C = 2200
         self.K0 = 1.1
-        self.L = 5
-        self.y = 0.8
+        self.L = Road.L*Road.n
+        self.y = 1
         self.w = Road.w
         self.n = 1
         self.Vs = Road.Vs
@@ -41,7 +50,7 @@ class PlanPT(object):
             elif i == "P":
                 lane_P += 1
             else:
-                lane_T += (1 - w_S)
+                lane_T += w_S
                 lane_P += w_S
         return lane_P, lane_T
 
@@ -65,7 +74,7 @@ class PlanPT(object):
         """
         t_list = []
         for i in range(len(flow_list)):
-            t_list.append(flow_list[i] * self.K0 * self.L / self.y / self.n / self.Vs[i])
+            t_list.append(flow_list[i] * self.K0 * self.L / self.y / self.n / self.Vs[i]*3.6)
 
         l_m, l_n = self.get_lane_pt(plan)
         result = t_list[0] * (1 + self.a * (flow_list[0] / l_m / self.C) ** self.b) + \

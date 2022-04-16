@@ -209,8 +209,8 @@ class MPC(object):
             t = t + delt_t
 
         ind = np.argmin(impedance)
-        print(plans[ind] )
-        print(flow_out )
+        # print(plans[ind] )
+        # print(flow_out )
         return plans[ind],sum_flow * delt_t /predict_time
 
     def calibration(self, seg_data):
