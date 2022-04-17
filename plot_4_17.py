@@ -1,4 +1,6 @@
-# import numpy as np
+
+# 画热力图
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -59,7 +61,7 @@ def get_result(data):
 
 numline = 4
 
-path_result = "data/result/"+str(numline)+"/" +"3" +"_17_"
+path_result = "data/result/"+str(numline)+"/" +"3" +"_16_"
 
 path_mpc = path_result + "mpc" + ".csv"
 path_feedback = path_result + "feedback" + ".csv"
