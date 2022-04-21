@@ -1,0 +1,4 @@
+# Control_Method_Separating_Trucks_from_Passenger
+实现高速公路客货分道各种控制策略
+
+main.py 主程序
