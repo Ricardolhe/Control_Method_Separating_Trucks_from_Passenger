@@ -20,8 +20,8 @@ def get_result(type_con):
     index = 0
     l = 8500
     for bei in np.linspace(1.0, 2.0, 11):
-        path_result = "data/result/" + str(numline) + "/" + "3_" +str(int(bei * 10)) + "_"
-        # path_result = "data/result/" + str(numline) + "/" + str(int(bei * 10)) + "_"
+        # path_result = "data/result/" + str(numline) + "/" + "3_" +str(int(bei * 10)) + "_"
+        path_result = "data/result/" + str(numline) + "/" + str(int(bei * 10)) + "_"
         path = path_result + type_con + ".csv"
         data = dftool.df_load_csv(path)
         data = data.loc[(data["time_y"] >= start) & (data["time_y"] <= end)]
@@ -72,5 +72,5 @@ def save_data(numline):
 
 
 
-numline = 4
+numline = 3
 save_data(numline)

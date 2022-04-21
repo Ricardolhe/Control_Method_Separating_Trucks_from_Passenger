@@ -35,7 +35,7 @@ def set_rou(numline,bei):
 if __name__ == "__main__":
     numline =3
     # 设置rou
-    seed_i= 1234
+    seed_i= 1111
     for bei in np.linspace(2.0,2.0,1):
         print(bei)
         set_rou(numline,bei)
@@ -43,9 +43,9 @@ if __name__ == "__main__":
         planpt = PlanPT(control.control_road)  # 创建客货分道方案对象
         path_result = "data/result/" + str(numline) + "/" +str(int(bei*10)) +"_"
 
-        # # 记录模型预测控制结果
-        # result= control.mpc_controls(["S"]*numline)
-        # result.to_csv(path_result + "mpc" + ".csv",index =False)
+        # 记录模型预测控制结果
+        result= control.mpc_controls(["S"]*numline)
+        result.to_csv(path_result + "mpc" + ".csv",index =False)
         #
         # # # 记录无控制结果
         # result = control.static_controls()# 无控制

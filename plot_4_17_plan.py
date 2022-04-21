@@ -5,6 +5,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib import font_manager
 
 import tools.dataframe_tools as dftool
 
@@ -90,33 +91,35 @@ list_plan = [plan_mpc,plan_feedback]
 list_data = [data_mpc,data_feedback]
 fig,ax = plt.subplots(2, 1, figsize=(40,40))
 
-j =0
+j =1
 
 
 x = list_data[j]["to"]
 ax[0].plot(x,list_data[j]["flow_all"])
 ax[0].plot(x, list_data[j]["flow_p"],linestyle='dashdot')
 ax[0].plot(x, list_data[j]["flow_t"], linestyle='dashed')
-ax[0].set_xticks(np.arange(900,7500,300))
+ax[0].set_xticks(np.arange(900,7500,300),np.arange(900,7500,300),fontsize=15)
+
+ax[0].tick_params( labelsize= 15)
 ax[0].set_ylim(top=1200)
 # ax[0, j].set_yticks(np.arange(0, 1300, 200))
-ax[0].legend(["All classes","Passenger class","Truck class"])
+ax[0].legend(["All classes","Passenger class","Truck class"],fontsize=15)
 # ax[0, j].set_yticks(np.arange(0, 1400, 200))
 ax[0].grid()  # 网格线
 ax[0].set_xlim(left=900, right=7200)
 
 data_plot = list_plan[j].astype('float').values.T
 tem_ax = ax[1].imshow(data_plot,cmap="viridis_r")
-ax[1].set_yticks(np.arange(0, 4, 1),["line_1","line_2","line_3","line_4"])
+ax[1].set_yticks(np.arange(0, 4, 1),["line_1","line_2","line_3","line_4"],fontsize=15)
 # ax[1, j].set_xlim(left=0,right=21)
 # ax[1, j].grid(color='w', linestyle='-', linewidth=2)  # 网格线
-ax[1].set_xticks(np.arange(0, 21, 1), np.arange(1, 22, 1))
-ax[0].legend(["All classes", "Passenger class", "Truck class"])
+ax[1].set_xticks(np.arange(0, 21, 1), np.arange(1, 22, 1),fontsize=15)
+
 # fig.colorbar(tem_ax, ax=ax[1, j], orientation='horizontal', shrink=0.90)
 
 
-ax[0].set_ylabel("flow (pcu)")
-ax[1].set_ylabel("contral plan")
+ax[0].set_ylabel("flow (pcu)",fontsize=20)
+ax[1].set_ylabel("contral plan",fontsize=20)
 fig.align_labels()
 
 plt.subplot_tool()

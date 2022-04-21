@@ -41,7 +41,7 @@ data = dftool.df_load_excel(path_data)
 data = get_date(data)
 
 # plot bar
-label_i = 4
+label_i = 1
 label_index = ["TTC","Flow","Speed","Timeloss","Total"][label_i]
 label_class = ["all","p","t"]
 list_label=["Feedback","SSP","TSP","TSS"]
@@ -53,18 +53,19 @@ label_plot = [label_index + "_" + i for i in label_class]
 fig,ax=plt.subplots(figsize=(20,20))
 data_plot = data.loc[:,label_plot]
 data_plot.plot(kind='bar', stacked=False,ax=ax)
-ax.legend([label_index + "_" + i for i in ["All classes","Passenger class","Truck class"]])
-plt.xticks(rotation=0)
-ax.set_ylabel("Effects of optimization(%)")
-ax.set_title("Percentage improvement of MPC compared with other methods",fontdict={'size': 20})
+ax.legend([label_index + "_" + i for i in ["All classes","Passenger class","Truck class"]],fontsize=15)
+plt.xticks(rotation=0,fontsize=20)
+plt.yticks(fontsize=20)
+ax.set_ylabel("Effects of optimization(%)",fontsize=20)
+ax.set_title("Percentage improvement of MPC compared with other methods",fontdict={'size': 30})
 plt.axhline(0, color='grey', linewidth=0.8)
 
 for x,y in zip(range(0,5),data_plot[label_plot[0]]):
-    plt.text(x-0.17,y+0.05,'%.2f' %y +"%", ha='center',va='bottom')
+    plt.text(x-0.17,y+0.05,'%.1f' %y +"%", ha='center',va='bottom',fontsize=15)
 for x,y in zip(range(0,5),data_plot[label_plot[1]]):
-    plt.text(x,y+0.05,'%.2f' %y +"%", ha='center')
+    plt.text(x,y+0.05,'%.1f' %y +"%", ha='center',fontsize=15)
 for x,y in zip(range(0,5),data_plot[label_plot[2]]):
-    plt.text(x+0.17,y+0.05,'%.2f' %y +"%", ha='center')
+    plt.text(x+0.17,y+0.05,'%.1f' %y +"%", ha='center',fontsize=15)
 
 plt.show()
 print(1)
