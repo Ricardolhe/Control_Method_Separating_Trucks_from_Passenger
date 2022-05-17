@@ -521,7 +521,7 @@ class Controls(object):
 
     def static_controls(self, first_plan=None):
         """
-        静态客货分道,当不输入参数时，为无控制
+        静态客货分道
         """
         traci.start(self.sumoCmd)
         step = 0
