@@ -14,7 +14,7 @@ path_result = "data/result/"+str(numline)+"/"
 result= control.mpc_controls(["S"]*numline)
 result.to_csv(path_result + "mpc" + ".csv",index =False)
 #
-# # 记录无控制结果
+# # 记录初始控制方案控制结果
 result = control.static_controls()# 无控制
 result.to_csv(path_result + "no" + ".csv",index =False)
 
